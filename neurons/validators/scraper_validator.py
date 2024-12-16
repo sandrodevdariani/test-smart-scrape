@@ -1,6 +1,7 @@
 from datura.dataset.tool_return import ResponseOrder
 import torch
 import random
+import os
 import json
 import bittensor as bt
 from base_validator import AbstractNeuron
@@ -14,6 +15,7 @@ from datura.stream import collect_final_synapses
 from reward import RewardModelType, RewardScoringType
 from typing import List
 from utils.mock import MockRewardModel
+from datura.utils import save_logs_in_chunks
 import time
 from neurons.validators.reward.summary_relevance import SummaryRelevanceRewardModel
 from neurons.validators.reward.twitter_content_relevance import (
@@ -38,6 +40,10 @@ from datura.dataset.date_filters import (
 from neurons.validators.organic_query_state import OrganicQueryState
 from neurons.validators.penalty.streaming_penalty import StreamingPenaltyModel
 
+# Define timeout constants
+HARD_TIMEOUT = float(os.getenv("HARD_TIMEOUT", 10.0))  # seconds
+OVERFLOW_PERIOD = float(os.getenv("OVERFLOW_PERIOD", 5.0))  # seconds
+MAX_PENALTY = float(os.getenv("MAX_PENALTY", 1.0))  # Maximum penalty as a fraction (e.g., 1.0 for 100%)
 
 class ScraperValidator:
     def __init__(self, neuron: AbstractNeuron):
@@ -164,7 +170,9 @@ class ScraperValidator:
         ]
 
         self.penalty_functions = [
-            StreamingPenaltyModel(max_penalty=1),
+            StreamingPenaltyModel(hard_timeout=HARD_TIMEOUT,
+                                  overflow_period=OVERFLOW_PERIOD,
+                                  max_penalty=MAX_PENALTY),
         ]
 
     def get_random_execution_time(self):
@@ -431,6 +439,28 @@ class ScraperValidator:
                 val_score_responses_list=val_score_responses_list,
                 organic_penalties=organic_penalties,
                 neuron=self.neuron,
+            )
+
+            await save_logs_in_chunks(
+                self,
+                responses=responses,
+                uids=uids,
+                rewards=rewards,
+                summary_rewards=summary_rewards,
+                twitter_rewards=twitter_rewards,
+                search_rewards=search_rewards,
+                performance_rewards=latency_rewards,
+                original_summary_rewards=all_original_rewards[0],
+                original_twitter_rewards=all_original_rewards[1],
+                original_search_rewards=all_original_rewards[2],
+                original_performance_rewards=all_original_rewards[3],
+                tweet_scores=val_score_responses_list[0],
+                search_scores=val_score_responses_list[1],
+                summary_link_scores=val_score_responses_list[2],
+                weights=scores,
+                neuron=self.neuron,
+                netuid=self.neuron.config.netuid,
+                organic_penalties=organic_penalties,
             )
 
             return rewards, uids, val_score_responses_list, event, all_original_rewards

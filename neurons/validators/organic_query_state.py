@@ -4,6 +4,7 @@ from datura.protocol import ScraperStreamingSynapse
 from datura.dataset.date_filters import DateFilter, DateFilterType
 from datetime import datetime
 import pytz
+import bittensor as bt
 import logging
 
 logger = logging.getLogger(__name__)

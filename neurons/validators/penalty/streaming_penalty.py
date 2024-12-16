@@ -29,6 +29,11 @@ def calculate_time_penalty(elapsed_time: float, limit: float = HARD_TIMEOUT, ove
         return MAX_PENALTY
 
 class StreamingPenaltyModel(BasePenaltyModel):
+    def __init__(self, hard_timeout: float = 10.0, overflow_period: float = 5.0, max_penalty: float = 1.0):
+        super().__init__(max_penalty=max_penalty)
+        self.hard_timeout = hard_timeout
+        self.overflow_period = overflow_period
+
     @property
     def name(self) -> str:
         return PenaltyModelType.streaming_penalty.value
@@ -40,6 +45,7 @@ class StreamingPenaltyModel(BasePenaltyModel):
         encoding = tiktoken.get_encoding("cl100k_base")
 
         for index, response in enumerate(responses):
+            print(f"Response {index}: elapsed_time={response.elapsed_time}")
             streamed_text_chunks = []
 
             for chunks in response.text_chunks.values():
@@ -62,12 +68,12 @@ class StreamingPenaltyModel(BasePenaltyModel):
                     penalty = (token_count - MAX_TOKENS_PER_CHUNK) * PENALTY_PER_EXCEEDING_TOKEN
                     token_penalty = min(1.0, token_penalty + penalty)
 
-            #Time-Based Penalty Calculation
+            # Time-Based Penalty Calculation
             if response.elapsed_time is not None:
                 time_penalty = calculate_time_penalty(
                     elapsed_time=response.elapsed_time,
-                    limit=HARD_TIMEOUT,
-                    overflow=OVERFLOW_PERIOD
+                    limit=self.hard_timeout,
+                    overflow=self.overflow_period,
                 )
                 # Normalize time_penalty to [0,1]
                 time_penalty_normalized = time_penalty / MAX_PENALTY
@@ -75,12 +81,14 @@ class StreamingPenaltyModel(BasePenaltyModel):
                 # If elapsed_time is not provided, assume maximum penalty
                 time_penalty_normalized = 1.0
 
-            #Combine Penalties
+            # Combine Penalties
+            print(f"Response {index}: total penalty = {accumulated_penalties[index]}")
             total_penalty = min(1.0, token_penalty + time_penalty_normalized)
 
-            #Assign the Accumulated Penalty
+            # Assign the Accumulated Penalty
             accumulated_penalties[index] = total_penalty
 
         return accumulated_penalties
+
 
 

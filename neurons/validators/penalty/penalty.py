@@ -24,8 +24,9 @@ from neurons.validators.utils.tasks import Task
 
 
 class BasePenaltyModel(ABC):
-    def __init__(self, max_penalty: float):
-        self.max_penalty = max_penalty
+    def __init__(self, **kwargs):
+        # Allow derived classes to define and handle additional parameters
+        self.max_penalty = kwargs.get('max_penalty', 1.0)
 
     @property
     @abstractmethod
@@ -39,7 +40,7 @@ class BasePenaltyModel(ABC):
 
     @abstractmethod
     def calculate_penalties(
-        responses: List[bt.Synapse], tasks: List[Task]
+        self, responses: List[bt.Synapse], tasks: List[Task]
     ) -> torch.FloatTensor: ...
 
     def apply_penalties(
@@ -57,6 +58,7 @@ class BasePenaltyModel(ABC):
         applied_penalties = 1 - adjusted_penalties
 
         return raw_penalties, adjusted_penalties, applied_penalties
+
 
 
 class PenaltyModelType(Enum):

@@ -231,7 +231,7 @@ class StreamMiner(ABC):
             return False, f"accepting {synapse_type} request from {hotkey}"
 
         except Exception as e:
-            bt.logging.error(f"errror in blacklist {traceback.format_exc()}")
+            bt.logging.error(f"error in blacklist {traceback.format_exc()}")
 
     def blacklist_is_alive(self, synapse: IsAlive) -> Tuple[bool, str]:
         blacklist = self.base_blacklist(synapse, datura.ISALIVE_BLACKLIST_STAKE)
@@ -327,7 +327,7 @@ class StreamMiner(ABC):
                     current_block - self.last_epoch_block
                     < self.config.miner.blocks_per_epoch
                 ):
-                    # --- Wait for next bloc.
+                    # --- Wait for next block.
                     time.sleep(1)
                     current_block = self.subtensor.get_current_block()
                     # --- Check if we should exit.
@@ -439,7 +439,7 @@ def get_valid_hotkeys(config):
                         signature = run.config["signature"]
                         version = run.config["version"]
                         bt.logging.debug(
-                            f"found running run of hotkey {hotkey}, {version} "
+                            f"dound running run of hotkey {hotkey}, {version} "
                         )
 
                         if latest_version == None:

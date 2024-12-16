@@ -24,6 +24,7 @@ from datura.utils import resync_metagraph, save_logs_in_chunks
 from neurons.validators.proxy.uid_manager import UIDManager
 
 
+
 class Neuron(AbstractNeuron):
     @classmethod
     def check_config(cls, config: "bt.Config"):
@@ -224,6 +225,9 @@ class Neuron(AbstractNeuron):
 
             weights = await self.run_sync_in_async(lambda: get_weights(self))
 
+
+            bt.logging.info("Penalties applied successfully to rewards.")
+
             asyncio.create_task(
                 save_logs_in_chunks(
                     self,
@@ -250,6 +254,7 @@ class Neuron(AbstractNeuron):
         except Exception as e:
             bt.logging.error(f"Error in update_scores: {e}")
             raise e
+
 
     def update_moving_averaged_scores(self, uids, rewards):
         try:
@@ -290,6 +295,7 @@ class Neuron(AbstractNeuron):
         except Exception as e:
             bt.logging.error(f"General exception: {e}\n{traceback.format_exc()}")
             await asyncio.sleep(100)
+
 
     async def run_synthetic_queries(self, strategy=QUERY_MINERS.RANDOM):
         bt.logging.info(f"Starting run_synthetic_queries with strategy={strategy}")
@@ -444,22 +450,16 @@ class Neuron(AbstractNeuron):
         bt.logging.info(f"Validator starting at block: {self.block}")
 
         try:
-
             async def run_with_interval(interval, strategy):
                 query_count = 0  # Initialize query count
                 while True:
                     try:
                         if not self.available_uids:
-                            bt.logging.info(
-                                "No available UIDs, sleeping for 10 seconds."
-                            )
+                            bt.logging.info("No available UIDs, sleeping for 10 seconds.")
                             await asyncio.sleep(10)
                             continue
                         self.loop.create_task(self.run_synthetic_queries(strategy))
-
-                        await asyncio.sleep(
-                            interval
-                        )  # Wait for 1800 seconds (30 minutes)
+                        await asyncio.sleep(interval)
                     except Exception as e:
                         bt.logging.error(f"Error during task execution: {e}")
                         await asyncio.sleep(interval)  # Wait before retrying
@@ -471,11 +471,10 @@ class Neuron(AbstractNeuron):
                             await asyncio.sleep(10)
                             continue
                         self.loop.create_task(self.run_organic_queries())
-
                         await asyncio.sleep(interval)
                     except Exception as e:
                         bt.logging.error(f"Error during task execution: {e}")
-                        await asyncio.sleep(interval)  # Wait before retrying
+                        await asyncio.sleep(interval) # Wait before retrying
 
             if self.config.neuron.run_random_miner_syn_qs_interval > 0:
                 self.loop.create_task(
@@ -492,20 +491,19 @@ class Neuron(AbstractNeuron):
                         QUERY_MINERS.ALL,
                     )
                 )
-            # If someone intentionally stops the validator, it'll safely terminate operations.
 
             three_hours_in_seconds = 10800
             self.loop.create_task(run_organic_with_interval(three_hours_in_seconds))
-        except KeyboardInterrupt:
-            self.axon.stop()
-            bt.logging.success("Validator killed by keyboard interrupt.")
-            sys.exit()
 
-        # In case of unforeseen errors, the validator will log the error and quit
+            while True:
+                await asyncio.sleep(10)  # Keep the validator running.
+
         except Exception as err:
-            bt.logging.error("Error during validation", str(err))
-            bt.logging.debug(print_exception(type(err), err, err.__traceback__))
-            self.should_exit = True
+            bt.logging.error("Unhandled exception in validator run loop: ", str(err))
+            bt.logging.debug(traceback.format_exc())
+        finally:
+            bt.logging.info("Validator shutting down gracefully.")
+
 
 
 def main():
