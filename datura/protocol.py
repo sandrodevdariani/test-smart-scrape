@@ -134,11 +134,11 @@ class ScraperStreamingSynapse(bt.StreamingSynapse):
     #     description="Seed for text generation. This attribute is immutable and cannot be updated.",
     # )
 
-    # model: Optional[str] = pydantic.Field(
-    #     "",
-    #     title="model",
-    #     description="The model that which to use when calling openai for your response.",
-    # )
+    model: Optional[str] = pydantic.Field(
+        "",
+        title="model",
+        description="The model that which to use when calling openai for your response.",
+    )
 
     tools: Optional[List[str]] = pydantic.Field(
         default_factory=list,
@@ -280,6 +280,12 @@ class ScraperStreamingSynapse(bt.StreamingSynapse):
         default_factory=dict,
         title="Text Chunks",
     )
+
+    #is_synthetic: bool = pydantic.Field(
+    #    False,
+    #    title="Is Synthetic",
+    #    description="Indicates whether the response is synthetic (True) or organic (False).",
+    #)
 
     @property
     def texts(self) -> Dict[str, str]:
