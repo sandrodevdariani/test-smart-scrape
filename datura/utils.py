@@ -592,6 +592,100 @@ async def save_logs_in_chunks_for_basic(
         raise e
 
 
+async def save_logs_in_chunks_for_basic_web(
+    self,
+    responses,
+    uids,
+    rewards,
+    search_rewards,
+    performance_rewards,
+    original_search_rewards,
+    original_performance_rewards,
+    search_scores,
+    weights,
+    neuron,
+    netuid,
+    organic_penalties,
+):
+    try:
+        logs = [
+            {
+                "prompt": response.query,
+                "result": [
+                    {
+                        "title": web.title,
+                        "snippet": web.snippet,
+                        "link": web.link,
+                        "data": web.data,
+                        "source": web.source,
+                    }
+                    for web in response.results
+                ],
+                "score": reward,
+                "search_score": search_reward,
+                "performance_score": performance_reward,
+                "original_twitter_score": original_search_reward,
+                "original_performance_score": original_performance_reward,
+                "search_scores": search_score,
+                "validator_result": [
+                    val_result.dict() for val_result in response.validator_result
+                ],
+                "weight": weights.get(str(uid)),
+                "miner": {
+                    "uid": uid,
+                    "hotkey": response.axon.hotkey,
+                    "coldkey": next(
+                        (
+                            axon.coldkey
+                            for axon in self.metagraph.axons
+                            if axon.hotkey == response.axon.hotkey
+                        ),
+                        None,  # Provide a default value here, such as None or an appropriate placeholder
+                    ),
+                },
+                "validator": {
+                    "uid": neuron.uid,
+                    "hotkey": neuron.dendrite.keypair.ss58_address,
+                    "coldkey": next(
+                        (
+                            nr.coldkey
+                            for nr in self.metagraph.neurons
+                            if nr.hotkey == neuron.dendrite.keypair.ss58_address
+                        ),
+                        None,
+                    ),
+                },
+                "time": response.dendrite.process_time,
+                "organic_penalty": organic_penalty,
+                "max_execution_time": response.max_execution_time,
+            }
+            for response, uid, reward, search_reward, performance_reward, original_search_reward, original_performance_reward, search_score, organic_penalty in zip(
+                responses,
+                uids.tolist(),
+                rewards.tolist(),
+                search_rewards.tolist(),
+                performance_rewards.tolist(),
+                original_search_rewards,
+                original_performance_rewards,
+                search_scores,
+                organic_penalties,
+            )
+        ]
+
+        # Divide logs into chunks for saving
+        chunk_size = 20
+        log_chunks = [logs[i : i + chunk_size] for i in range(0, len(logs), chunk_size)]
+
+        for chunk in log_chunks:
+            await save_logs(
+                logs=chunk,
+                netuid=netuid,
+            )
+    except Exception as e:
+        bt.logging.error(f"Error in save_logs_in_chunks_for_basic: {e}")
+        raise e
+
+
 def calculate_bonus_score(
     original_score, link_count, max_bonus=0.2, link_sensitivity=2
 ):

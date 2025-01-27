@@ -667,10 +667,10 @@ class WebSearchResult(BaseModel):
     link: str
     date: str
     source: str
-    author: Optional[str] = None
-    image: Optional[str] = None
-    favicon: Optional[str] = None
-    highlights: List[str]
+    # author: Optional[str] = None
+    # image: Optional[str] = None
+    # favicon: Optional[str] = None
+    # highlights: List[str]
 
 
 class WebSearchResultList(BaseModel):
@@ -742,10 +742,16 @@ class WebSearchSynapse(bt.Synapse):
         description="Maximum time to execute concrete request",
     )
 
-    results: Optional[List[WebSearchResult]] = pydantic.Field(
+    validator_result: Optional[List[TwitterScraperTweet]] = pydantic.Field(
         default_factory=list,
-        title="Web",
-        description="Fetched Web Data.",
+        title="validator tweets",
+        description="Fetched validator Tweets Data.",
+    )
+
+    results: Optional[List[Dict[str, Any]]] = pydantic.Field(
+        default_factory=list,
+        title="web",
+        description="Fetched web Data.",
     )
 
     def deserialize(self) -> str:

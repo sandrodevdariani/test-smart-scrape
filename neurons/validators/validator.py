@@ -15,6 +15,7 @@ import substrateinterface
 from datura.protocol import IsAlive, Model
 from neurons.validators.advanced_scraper_validator import AdvancedScraperValidator
 from neurons.validators.basic_scraper_validator import BasicScraperValidator
+from neurons.validators.basic_web_scraper_validator import BasicWebScraperValidator
 from config import add_args, check_config, config
 from weights import init_wandb, set_weights, get_weights
 from traceback import print_exception
@@ -25,6 +26,7 @@ from datura.utils import (
     resync_metagraph,
     save_logs_in_chunks,
     save_logs_in_chunks_for_basic,
+    save_logs_in_chunks_for_basic_web,
 )
 from neurons.validators.proxy.uid_manager import UIDManager
 from typing import Optional
@@ -50,6 +52,7 @@ class Neuron(AbstractNeuron):
 
     advanced_scraper_validator: "AdvancedScraperValidator"
     basic_scraper_validator: "BasicScraperValidator"
+    basic_web_scraper_validator: "BasicWebScraperValidator"
     moving_average_scores: torch.Tensor = None
     uid: int = None
     shutdown_event: asyncio.Event()
@@ -304,6 +307,45 @@ class Neuron(AbstractNeuron):
             bt.logging.error(f"Error in update_scores: {e}")
             raise e
 
+    async def update_scores_for_basic_web(
+        self,
+        wandb_data,
+        responses,
+        uids,
+        rewards,
+        all_rewards,
+        all_original_rewards,
+        val_score_responses_list,
+        organic_penalties,
+        neuron,
+    ):
+        try:
+            if self.config.wandb_on:
+                wandb.log(wandb_data)
+
+            weights = await self.run_sync_in_async(lambda: get_weights(self))
+
+            asyncio.create_task(
+                save_logs_in_chunks_for_basic_web(
+                    self,
+                    responses=responses,
+                    uids=uids,
+                    rewards=rewards,
+                    search_rewards=all_rewards[0],
+                    performance_rewards=all_rewards[1],
+                    original_search_rewards=all_original_rewards[0],
+                    original_performance_rewards=all_original_rewards[1],
+                    search_scores=val_score_responses_list[0],
+                    weights=weights,
+                    neuron=neuron,
+                    netuid=self.config.netuid,
+                    organic_penalties=organic_penalties,
+                )
+            )
+        except Exception as e:
+            bt.logging.error(f"Error in update_scores: {e}")
+            raise e
+
     def update_moving_averaged_scores(self, uids, rewards):
         try:
             # Ensure uids is a tensor
@@ -348,6 +390,14 @@ class Neuron(AbstractNeuron):
         try:
             # self.metagraph = self.subtensor.metagraph(netuid=self.config.netuid)
             await self.basic_scraper_validator.query_and_score_twitter_basic(strategy)
+        except Exception as e:
+            bt.logging.error(f"General exception: {e}\n{traceback.format_exc()}")
+            await asyncio.sleep(100)
+
+    async def basic_web_query_synapse(self, strategy=QUERY_MINERS.RANDOM):
+        try:
+            # self.metagraph = self.subtensor.metagraph(netuid=self.config.netuid)
+            await self.basic_web_scraper_validator.query_and_score_web_basic(strategy)
         except Exception as e:
             bt.logging.error(f"General exception: {e}\n{traceback.format_exc()}")
             await asyncio.sleep(100)
@@ -440,6 +490,51 @@ class Neuron(AbstractNeuron):
                 f"Total execution time for run_basic_synthetic_queries: {total_execution_time:.2f} minutes"
             )
 
+    async def run_basic_web_synthetic_queries(self, strategy=QUERY_MINERS.RANDOM):
+        bt.logging.info(
+            f"Starting run_basic_synthetic_queries with strategy={strategy}"
+        )
+        total_start_time = time.time()
+        try:
+
+            async def run_forward():
+                start_time = time.time()
+                bt.logging.info(
+                    f"Running step forward for basic_query_synapse, Step: {self.step}"
+                )
+                coroutines = [self.basic_web_query_synapse(strategy) for _ in range(1)]
+                await asyncio.gather(*coroutines)
+                end_time = time.time()
+                bt.logging.info(
+                    f"Completed gathering coroutines for basic_query_synapse in {end_time - start_time:.2f} seconds"
+                )
+
+            bt.logging.info("Running coroutines with run_until_complete")
+            self.loop.run_until_complete(run_forward())
+            bt.logging.info("Completed running coroutines with run_until_complete")
+
+            sync_start_time = time.time()
+            bt.logging.info("Calling sync metagraph method")
+            await self.sync_metagraph()
+            bt.logging.info("Completed calling sync metagraph method")
+
+            sync_end_time = time.time()
+            bt.logging.info(
+                f"Sync metagraph method execution time: {sync_end_time - sync_start_time:.2f} seconds"
+            )
+
+            self.step += 1
+            bt.logging.info(f"Incremented step to {self.step}")
+        except Exception as err:
+            bt.logging.error("Error in run_basic_synthetic_queries", str(err))
+            bt.logging.debug(print_exception(type(err), err, err.__traceback__))
+        finally:
+            total_end_time = time.time()
+            total_execution_time = (total_end_time - total_start_time) / 60
+            bt.logging.info(
+                f"Total execution time for run_basic_synthetic_queries: {total_execution_time:.2f} minutes"
+            )
+
     async def run_organic_queries(self):
         result = self.advanced_scraper_validator.organic_query_state.get_random_organic_query(
             self.available_uids, self.metagraph.neurons
@@ -476,6 +571,27 @@ class Neuron(AbstractNeuron):
         bt.logging.info(f"Running organic queries for prompt: {synapse.query}")
 
         async for _ in self.basic_scraper_validator.organic(
+            query=query,
+            random_synapse=synapse,
+            random_uid=synapse_uid,
+            specified_uids=specified_uids,
+        ):
+            pass
+
+    async def run_basic_web_organic_queries(self):
+        result = self.basic_scraper_validator.basic_organic_query_state.get_random_organic_query(
+            self.available_uids, self.metagraph.neurons
+        )
+
+        if not result:
+            bt.logging.info("No organic queries are in history to run")
+            return
+
+        synapse, query, synapse_uid, specified_uids = result
+
+        bt.logging.info(f"Running organic queries for prompt: {synapse.query}")
+
+        async for _ in self.basic_web_scraper_validator.organic(
             query=query,
             random_synapse=synapse,
             random_uid=synapse_uid,

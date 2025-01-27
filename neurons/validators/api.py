@@ -490,7 +490,7 @@ async def web_search_endpoint(
         )
 
         # Call the `web_search` method
-        result = await neu.advanced_scraper_validator.web_search(
+        result = await neu.basic_scraper_validator.web_search(
             query=query,
             num=num,
             start=start,
